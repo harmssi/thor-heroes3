@@ -156,7 +156,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -492,7 +492,7 @@ jobs:
       run:
         shell: bash
     steps:
-        - uses: actions/checkout@v6
+        - uses: actions/checkout@v7
           with:
             submodules: recursive
 
@@ -572,7 +572,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -664,7 +664,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Prepare CI
       run: sudo apt update && sudo apt install cmake devscripts debhelper build-essential zlib1g-dev libboost-dev libboost-program-options-dev libboost-filesystem-dev libboost-system-dev libboost-locale-dev libboost-thread-dev libboost-iostreams-dev libminizip-dev
@@ -723,7 +723,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -829,7 +829,7 @@ jobs:
         shell: bash
 
     steps:
-        - uses: actions/checkout@v6
+        - uses: actions/checkout@v7
         - name: Ensure LF line endings
           run: |
             find . -path ./.git -prune -o -path ./AI/FuzzyLite -prune -o -path ./test/googletest \
@@ -858,7 +858,7 @@ jobs:
       actions: write                   # Partial JSON artifacts can't be deleted in PRs
     steps:
       - name: Checkout (for script path)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download all partial JSON artifacts
         continue-on-error: true
