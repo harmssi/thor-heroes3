@@ -27,7 +27,7 @@ Heroes of Might and Magic III) for the AYN Thor handheld. Deutsch: [unten](#deut
 Top: game (display 0). Bottom: the Thor deck (display 4). Screenshots taken on an AYN Thor with the
 author's own Steam copy (German).
 
-Videos: showcase VIDEO_SHOWCASE · install guide VIDEO_INSTALL
+Videos: [showcase](https://youtu.be/V5BhReTPpsc) · [install guide](https://youtu.be/Zw37Uym64Yw)
 
 ## Install (English)
 
@@ -108,6 +108,8 @@ Heroes of Might and Magic III) für den AYN Thor.
   RoE-Kampagnen als VCMI-Kampagnen um. Vollversionen (GOG usw.) werden unverändert genutzt.
 
 
+**Videos:** [Showcase](https://youtu.be/V5BhReTPpsc) · [Installationsanleitung](https://youtu.be/Zw37Uym64Yw)
+
 **Installation (Deutsch):** 1. Spiel besitzen (Steam *HD Edition* oder Complete/SoD). 2. Den ganzen Ordner
 `Heroes of Might & Magic III - HD Edition` auf den Thor kopieren – vom PC (Steam → Verwalten → Lokale Dateien
 durchsuchen) per USB z. B. nach `Download`, oder mit DroidDeck auf dem Thor laden und den Ordner aus
@@ -124,3 +126,7 @@ Schriften Inter und JetBrains Mono (SIL OFL 1.1).
 
 **Hinweis:** Inoffizielles Fanprojekt, nicht verbunden mit Ubisoft, New World Computing, 3DO, AYN oder dem
 VCMI-Team. Es werden keine Spieldaten mitgeliefert.
+
+---
+
+⭐ If it works for you, a star on GitHub helps the project – and subscribing helps me bring more ports to the Thor: https://www.youtube.com/@toravomusic?sub_confirmation=1
