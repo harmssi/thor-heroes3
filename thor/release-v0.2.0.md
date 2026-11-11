@@ -31,3 +31,5 @@ Install over 0.1.0; saves and the imported game data stay.
 - Still Restoration of Erathia content only with the Steam HD Edition (see README); no random maps there.
 
 `Heroes3-Thor-Edition-v0.2.0.apk` · SHA-256 in `SHA256SUMS`
+
+▶ Update video: https://youtu.be/BVrQce_IT_I
