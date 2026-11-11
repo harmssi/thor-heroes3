@@ -13,6 +13,8 @@ public final class ThorBridge {
 
     public interface Listener {
         void onState(String json);
+
+        void onArt(String key, int w, int h, byte[] rgba, int[] meta);
     }
 
     private static final StringBuilder pending = new StringBuilder();
@@ -39,6 +41,15 @@ public final class ThorBridge {
             String out = (shown ? "A\n" : "N\n") + pending;
             pending.setLength(0);
             return out;
+        }
+    }
+
+    /** Called by native code: one piece of interface art read from the player's game files (w = 0: not available). */
+    @SuppressWarnings("unused")
+    public static void art(final String key, final int w, final int h, final byte[] rgba, final int[] meta) {
+        final Listener l = listener;
+        if (l != null) {
+            ui.post(() -> l.onArt(key, w, h, rgba, meta));
         }
     }
 

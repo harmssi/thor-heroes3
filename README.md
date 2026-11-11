@@ -4,10 +4,17 @@
 Heroes of Might and Magic III) for the AYN Thor handheld. Deutsch: [unten](#deutsch).
 
 - **Top screen:** the adventure map fills the whole screen (no side panel), battles and towns as usual.
-- **Bottom screen (deck):** tap the minimap to move the camera, hero and town lists (tap = select,
-  tap again = open), army of the selection, resources, month/week/day, movement and spell points,
-  buttons for End turn, Spellbook, Sleep/Wake, Next hero, Game menu, Save.
-  In battle: active unit, hero spell points, battle log, Spellbook, Wait, Defend, Auto, Retreat, Surrender.
+- **Bottom screen (deck), in the game's own look:** drawn with the stone texture, picture buttons, hero
+  portraits, town and creature icons, resource icons and the font of the running game, read at runtime
+  from your game files. Resources and date, minimap (tap = jump), heroes with movement and spell point
+  bars and towns (tap = select, again = open), the army of the selection (tap two slots = move, swap or
+  merge, hold = split half off), and four pages: the side panel buttons (next hero, end turn, move,
+  sleep, spell book, kingdom overview, quest log, level, options, next town, hero screen, visit again,
+  dig, marketplace, thieves' guild, puzzle map, quick save), adventure spells (tap = cast), map tools
+  (view world, zoom, grid, overlays) and game (quick save / load, save, load, scenario info, menus).
+  In a town: hall, fort, recruit, tavern, marketplace, mage guild, swap armies, heroes, previous / next
+  town. With any window open: OK and Cancel on the deck. In battle: turn order, active unit, the hero's
+  combat spells (tap = cast, target on the top screen), log, the battle buttons, unit info, battle speed.
 - **Controller** works as in VCMI; the deck never takes the controller focus.
 - **Steam HD Edition support (RoE bridge):** the Steam "HD Edition" only contains *Restoration of
   Erathia* content, which stock VCMI cannot start. On first start the app converts the owner's text
@@ -24,7 +31,11 @@ Heroes of Might and Magic III) for the AYN Thor handheld. Deutsch: [unten](#deut
 |---|---|
 | ![Siege](docs/thor/04-siege.jpg) | ![Campaign](docs/thor/05-campaign.jpg) |
 
-Top: game (display 0). Bottom: the Thor deck (display 4). Screenshots taken on an AYN Thor with the
+| Deck 0.2.0: adventure map | Deck 0.2.0: battle |
+|---|---|
+| ![Deck, adventure map](docs/thor/06-deck-adventure.jpg) | ![Deck, battle](docs/thor/07-deck-battle.jpg) |
+
+Top: game (display 0). Bottom: the Thor deck (display 4); the upper pictures still show the deck of 0.1.0. Screenshots taken on an AYN Thor with the
 author's own Steam copy (German).
 
 Videos: [showcase](https://youtu.be/V5BhReTPpsc) · [install guide](https://youtu.be/Zw37Uym64Yw)
@@ -53,7 +64,7 @@ Saves live in `Android/data/de.harmssi.thorheroes/files/vcmi-data/Saves`.
 
 This app contains **no game data**. Copy the game folder of a Heroes III version you own to the
 device and import it on first start (see *Install* above).
-Game graphics are only read at runtime from your files; the deck draws its own shapes and text.
+Game graphics are only read at runtime from your files, also the art the deck is drawn with.
 
 ### Build
 
@@ -81,7 +92,6 @@ regenerates `android/res/raw/roe_support.zip` (JSON derived from VCMI's own conf
   `config/widgets/adventureMapThor.json`, `thor/`.
 - `roe-support` (CC-BY-SA 4.0, see `licenses-thor/README.md`) follows the pattern of [vcmi-mods/demo-support](https://github.com/vcmi-mods/demo-support)
   (Creative Commons Attribution-ShareAlike 4.0).
-- Fonts: Inter and JetBrains Mono, SIL Open Font License 1.1 (`android/res/raw/*_ofl.txt`).
 
 ### Disclaimer
 
@@ -97,10 +107,16 @@ compatibility. No game data is included or distributed.
 Heroes of Might and Magic III) für den AYN Thor.
 
 - **Oben:** Abenteuerkarte im Vollbild (ohne Seitenleiste), Kampf und Stadt wie gewohnt.
-- **Unten (Deck):** Minikarte antippen = Kamera springt, Helden- und Städteliste (antippen = auswählen,
-  nochmal = öffnen), Armee der Auswahl, Rohstoffe, Monat/Woche/Tag, Bewegungs- und Zauberpunkte,
-  Knöpfe Zug beenden, Zauberbuch, Schlafen/Wecken, Nächster Held, Spielmenü, Speichern.
-  Im Kampf: aktive Einheit, Zauberpunkte, Kampflog, Zauberbuch, Warten, Verteidigen, Auto, Rückzug, Aufgeben.
+- **Unten (Deck), im Look des Spiels:** gezeichnet mit Steintextur, Bildknöpfen, Heldenporträts, Stadt-,
+  Kreaturen- und Rohstoffsymbolen und der Schrift des laufenden Spiels, zur Laufzeit aus den eigenen
+  Spieldateien gelesen. Rohstoffe und Datum, Minikarte (antippen = springen), Helden mit Bewegungs- und
+  Zauberpunktbalken und Städte (antippen = auswählen, nochmal = öffnen), Armee der Auswahl (zwei Plätze
+  antippen = ziehen, tauschen, vereinen; halten = Hälfte abteilen) und vier Seiten: Befehle,
+  Abenteuerzauber (antippen = zaubern), Karte (Weltansicht, Zoom, Raster) und Spiel (Schnellspeichern /
+  -laden, Speichern, Laden, Menüs). In der Stadt: Rathaus, Festung, Rekrutieren, Taverne, Markt,
+  Magiergilde, Armeen tauschen, Helden, vorige / nächste Stadt. Bei offenem Fenster: OK und Abbrechen.
+  Im Kampf: Zugreihenfolge, aktive Einheit, Kampfzauber des Helden (antippen = zaubern, Ziel oben),
+  Kampflog, die Kampfknöpfe, Einheit-Info, Kampftempo.
 - **Controller** wie in VCMI; das Deck nimmt nie den Fokus.
 - **Steam HD Edition (RoE-Bridge):** Die HD Edition enthält nur *Restoration of Erathia*. Beim ersten Start
   formt die App die eigenen Text-Tabellen ins von VCMI erwartete Format um, installiert die kleine Mod

@@ -7,8 +7,6 @@
   Structure and approach follow **vcmi-mods/demo-support** (https://github.com/vcmi-mods/demo-support,
   CC-BY-SA 4.0) by the VCMI mod authors. It contains only JSON settings and an empty 1x1 image –
   no game data.
-- Fonts Inter (Rasmus Andersson) and JetBrains Mono (JetBrains): SIL Open Font License 1.1
-  (`android/res/raw/inter_ofl.txt`, `android/res/raw/jetbrainsmono_ofl.txt`).
 - Icon `thor/icon-512.png`: own artwork (shapes + Inter), same license as the code.
 
 No file from Heroes of Might and Magic III (LOD/SND/VID/maps/videos/music, converted tables or

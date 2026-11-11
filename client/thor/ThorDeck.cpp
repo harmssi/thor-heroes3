@@ -20,14 +20,29 @@ void ThorDeck::battleLog(const std::string &) {}
 #include "../adventureMap/AdventureMapInterface.h"
 #include "../battle/BattleInterface.h"
 #include "../battle/BattleStacksController.h"
+#include "../battle/BattleWindow.h"
 #include "../gui/EventDispatcher.h"
 #include "../gui/Shortcut.h"
 #include "../gui/ShortcutHandler.h"
 #include "../gui/WindowHandler.h"
 #include "../render/Graphics.h"
+#include "../render/IFont.h"
+#include "../render/IImage.h"
+#include "../render/IRenderHandler.h"
+#include "../adventureMap/AdventureMapShortcuts.h"
 #include "../windows/CCastleInterface.h"
 
 #include "../../lib/CAndroidVMHelper.h"
+#include "../../lib/CConfigHandler.h"
+#include "../../lib/GameLibrary.h"
+#include "../../lib/battle/CPlayerBattleCallback.h"
+#include "../../lib/entities/faction/CTown.h"
+#include "../../lib/entities/faction/CTownHandler.h"
+#include "../../lib/spells/CSpellHandler.h"
+#include "../../lib/spells/ISpellMechanics.h"
+#include "../../lib/spells/Problem.h"
+#include "../../lib/spells/adventure/AdventureSpellEffect.h"
+#include "../../lib/texts/CGeneralTextHandler.h"
 #include "../../lib/CCreatureHandler.h"
 #include "../../lib/CStack.h"
 #include "../../lib/TerrainHandler.h"
@@ -38,6 +53,7 @@ void ThorDeck::battleLog(const std::string &) {}
 #include "../../lib/mapping/CMapHeader.h"
 #include "../../lib/mapping/TerrainTile.h"
 
+#include <SDL_surface.h>
 #include <jni.h>
 
 namespace
@@ -57,6 +73,7 @@ struct Jni
 	jclass cls = nullptr;
 	jmethodID poll = nullptr;
 	jmethodID push = nullptr;
+	jmethodID art = nullptr;
 
 	JNIEnv * env()
 	{
@@ -74,6 +91,7 @@ struct Jni
 			e->DeleteLocalRef(local);
 			poll = e->GetStaticMethodID(cls, "poll", "()Ljava/lang/String;");
 			push = e->GetStaticMethodID(cls, "push", "(Ljava/lang/String;)V");
+			art = e->GetStaticMethodID(cls, "art", "(Ljava/lang/String;II[B[I)V");
 		}
 		return e;
 	}
@@ -108,7 +126,118 @@ struct Jni
 			e->ExceptionClear();
 		e->DeleteLocalRef(js);
 	}
+
+	/// pixels: w*h*4 bytes R,G,B,A; meta: glyph widths of a font atlas (else empty)
+	void pushArt(const std::string & key, int w, int h, const std::vector<uint8_t> & pixels, const std::vector<jint> & meta)
+	{
+		JNIEnv * e = env();
+		if(!e || !art)
+			return;
+		jstring js = e->NewStringUTF(key.c_str());
+		jbyteArray px = e->NewByteArray(static_cast<jsize>(pixels.size()));
+		e->SetByteArrayRegion(px, 0, static_cast<jsize>(pixels.size()), reinterpret_cast<const jbyte *>(pixels.data()));
+		jintArray mt = e->NewIntArray(static_cast<jsize>(meta.size()));
+		e->SetIntArrayRegion(mt, 0, static_cast<jsize>(meta.size()), meta.data());
+		e->CallStaticVoidMethod(cls, art, js, w, h, px, mt);
+		if(e->ExceptionCheck())
+			e->ExceptionClear();
+		e->DeleteLocalRef(js);
+		e->DeleteLocalRef(px);
+		e->DeleteLocalRef(mt);
+	}
 } jni;
+
+SDL_Surface * rgbaSurface(int w, int h)
+{
+	SDL_Surface * s = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ABGR8888); // bytes in memory: R,G,B,A
+	if(s)
+		SDL_FillRect(s, nullptr, 0);
+	return s;
+}
+
+std::vector<uint8_t> pixelsOf(SDL_Surface * s)
+{
+	std::vector<uint8_t> out(static_cast<size_t>(s->w) * s->h * 4);
+	for(int y = 0; y < s->h; ++y)
+		memcpy(out.data() + static_cast<size_t>(y) * s->w * 4, static_cast<const uint8_t *>(s->pixels) + y * s->pitch, static_cast<size_t>(s->w) * 4);
+	return out;
+}
+
+/// Interface art for the deck, read from the player's own game files at runtime (nothing is shipped):
+/// "def:<animation>:<frame>[:<player>]", "img:<image>[:<player>]", "font:<big|medium|small|tiny|calli>".
+/// A font is sent as one atlas of the characters 32..255 in white, meta = advance of every character.
+void sendArt(const std::string & key)
+{
+	std::vector<std::string> parts;
+	boost::split(parts, key, boost::is_any_of(":"));
+	SDL_Surface * surface = nullptr;
+	std::vector<jint> meta;
+	try
+	{
+		if(parts.size() == 2 && parts[0] == "font")
+		{
+			static const std::map<std::string, EFonts> fonts = {{"big", FONT_BIG}, {"medium", FONT_MEDIUM}, {"small", FONT_SMALL}, {"tiny", FONT_TINY}, {"calli", FONT_CALLI}};
+			const auto font = ENGINE->renderHandler().loadFont(fonts.at(parts[1]));
+			const int height = static_cast<int>(font->getLineHeightScaled());
+			std::vector<std::string> glyphs;
+			int total = 0;
+			for(int c = 32; c < 256; ++c)
+			{
+				std::string ch = c < 128 ? std::string(1, static_cast<char>(c)) : std::string{static_cast<char>(0xC0 | c >> 6), static_cast<char>(0x80 | (c & 63))};
+				// advance = what one more of this character adds to a line (a lone glyph also counts its bearings)
+				int w = c >= 127 && c < 160 ? 0 : static_cast<int>(font->getStringWidthScaled(ch + ch) - font->getStringWidthScaled(ch));
+				glyphs.push_back(ch);
+				meta.push_back(w);
+				total += w + 4;
+			}
+			surface = rgbaSurface(total, height);
+			int x = 0;
+			for(size_t i = 0; surface && i < glyphs.size(); ++i)
+			{
+				if(meta[i] > 0)
+				{
+					// one glyph at a time: fonts place text in unscaled coordinates, the atlas is in pixels
+					SDL_Surface * g = rgbaSurface(meta[i] + 4, height);
+					font->renderTextLeft(g, glyphs[i], ColorRGBA(255, 255, 255), Point(0, 0));
+					SDL_SetSurfaceBlendMode(g, SDL_BLENDMODE_NONE);
+					SDL_Rect dst{x, 0, g->w, g->h};
+					SDL_BlitSurface(g, nullptr, surface, &dst);
+					SDL_FreeSurface(g);
+				}
+				x += meta[i] + 4;
+			}
+		}
+		else if(parts.size() >= 2 && (parts[0] == "def" || parts[0] == "img"))
+		{
+			const bool def = parts[0] == "def";
+			if(def && parts.size() < 3)
+				throw std::runtime_error("frame missing");
+			std::shared_ptr<IImage> img = def
+				? ENGINE->renderHandler().loadImage(AnimationPath::builtin(parts[1]), std::stoi(parts[2]), 0, EImageBlitMode::COLORKEY)
+				: ENGINE->renderHandler().loadImage(ImagePath::builtin(parts[1]), EImageBlitMode::OPAQUE);
+			const size_t playerPart = def ? 3 : 2;
+			if(img && parts.size() > playerPart)
+				img->playerColored(PlayerColor(std::stoi(parts[playerPart])));
+			if(img && img->width() > 0 && img->height() > 0 && img->width() <= 2048 && img->height() <= 2048)
+			{
+				surface = rgbaSurface(img->width(), img->height());
+				if(surface)
+					img->draw(surface, Point(0, 0), nullptr, 1);
+			}
+		}
+	}
+	catch(const std::exception & e)
+	{
+		logGlobal->warn("Thor deck: no art for %s (%s)", key, e.what());
+	}
+	if(surface)
+	{
+		jni.pushArt(key, surface->w, surface->h, pixelsOf(surface), meta);
+		SDL_FreeSurface(surface);
+	}
+	else
+		jni.pushArt(key, 0, 0, {}, {}); // the deck then draws this piece itself
+}
 
 std::string base64(const std::vector<uint8_t> & in)
 {
@@ -175,6 +304,7 @@ JsonNode armyOf(const CArmedInstance * army)
 														  : slot.second->getCreature()->getNamePluralTranslated();
 		s["count"].Integer() = slot.second->getCount();
 		s["level"].Integer() = slot.second->getCreature()->getLevel();
+		s["icon"].Integer() = slot.second->getCreature()->getIconIndex();
 		out.Vector().push_back(s);
 	}
 	return out;
@@ -186,6 +316,7 @@ JsonNode heroNode(const CGHeroInstance * h, const CGHeroInstance * selected)
 	n["id"].Integer() = h->id.getNum();
 	n["name"].String() = h->getNameTranslated();
 	n["level"].Integer() = h->level;
+	n["icon"].Integer() = h->getIconIndex();
 	n["mp"].Integer() = h->movementPointsRemaining();
 	n["mpMax"].Integer() = h->movementPointsLimit(true);
 	n["mana"].Integer() = h->mana;
@@ -198,6 +329,32 @@ JsonNode heroNode(const CGHeroInstance * h, const CGHeroInstance * selected)
 	n["knowledge"].Integer() = h->getPrimSkillLevel(PrimarySkill::KNOWLEDGE);
 	return n;
 }
+
+/// spells of one kind the hero can cast, with cost; "ok" = castable right now
+JsonNode spellsOf(const CGHeroInstance * h, bool combat, const std::function<bool(const CSpell *)> & castable)
+{
+	JsonNode out;
+	out.setType(JsonNode::JsonType::DATA_VECTOR);
+	if(!h || !h->hasSpellbook())
+		return out;
+	for(const auto & sp : LIBRARY->spellh->objects)
+	{
+		if(!sp || sp->isCombat() != combat || sp->isCreatureAbility() || !h->canCastThisSpell(sp.get()))
+			continue;
+		JsonNode n;
+		const int cost = GAME->interface()->cb->getSpellCost(sp.get(), h);
+		n["id"].Integer() = sp->getId().getNum();
+		n["name"].String() = sp->getNameTranslated();
+		n["icon"].Integer() = sp->getIconIndex();
+		n["cost"].Integer() = cost;
+		n["ok"].Bool() = cost <= h->mana && castable(sp.get());
+		out.Vector().push_back(n);
+	}
+	return out;
+}
+
+std::string battleSpellsKey;
+JsonNode battleSpells;
 
 JsonNode battleNode(const BattleInterface & b)
 {
@@ -218,8 +375,22 @@ JsonNode battleNode(const BattleInterface & b)
 		u["shooter"].Bool() = s->isShooter();
 		u["shots"].Integer() = s->isShooter() ? s->shots.available() : 0;
 		u["side"].Integer() = static_cast<int>(s->unitSide());
+		u["icon"].Integer() = s->creatureIconIndex();
 		n["unit"] = u;
 	}
+	std::vector<battle::Units> order;
+	b.getBattle()->battleGetTurnOrder(order, 14, 0);
+	for(size_t turn = 0; turn < order.size(); ++turn)
+		for(const auto * unit : order[turn])
+		{
+			JsonNode q;
+			q["icon"].Integer() = unit->creatureIconIndex();
+			q["count"].Integer() = unit->getCount();
+			q["side"].Integer() = static_cast<int>(unit->unitSide());
+			q["turn"].Integer() = static_cast<int>(turn);
+			n["queue"].Vector().push_back(q);
+		}
+	n["speed"].Integer() = static_cast<int>(std::round(settings["battle"]["speedFactor"].Float()));
 	const CGHeroInstance * own = b.curInt && b.attackingHeroInstance && b.attackingHeroInstance->getOwner() == b.curInt->playerID
 		? b.attackingHeroInstance : b.defendingHeroInstance;
 	if(own)
@@ -227,6 +398,20 @@ JsonNode battleNode(const BattleInterface & b)
 		n["hero"].String() = own->getNameTranslated();
 		n["mana"].Integer() = own->mana;
 		n["manaMax"].Integer() = own->manaLimit();
+		n["heroIcon"].Integer() = own->getIconIndex();
+		// the spell list only changes with the active stack or the mana: do not test every spell 4x per second
+		std::string key = std::to_string(s ? s->unitId() : -1) + ":" + std::to_string(own->mana) + ":" + std::to_string(b.round);
+		if(key != battleSpellsKey)
+		{
+			battleSpellsKey = key;
+			const bool canCast = s && !b.tacticsMode && b.getBattle()->battleCanCastSpell(own, spells::Mode::HERO) == ESpellCastProblem::OK;
+			battleSpells = spellsOf(own, true, [&](const CSpell * sp)
+			{
+				spells::detail::ProblemImpl problem;
+				return canCast && sp->canBeCast(problem, b.getBattle().get(), spells::Mode::HERO, own);
+			});
+		}
+		n["spells"] = battleSpells;
 	}
 	n["tactics"].Bool() = b.tacticsMode;
 	for(const auto & line : logLines)
@@ -252,6 +437,8 @@ std::string buildState()
 	else
 		st["mode"].String() = "dialog";
 
+	// a dialog above the battle (retreat? surrender? result): the deck offers accept / cancel
+	st["modal"].Bool() = CPlayerInterface::battleInt && !ENGINE->windows().topWindow<BattleWindow>();
 	st["player"].Integer() = pi->playerID.getNum();
 	st["day"].Integer() = pi->cb->getDate(Date::DAY_OF_WEEK);
 	st["week"].Integer() = pi->cb->getDate(Date::WEEK);
@@ -271,12 +458,38 @@ std::string buildState()
 		n["selected"].Bool() = t == town;
 		n["fort"].Integer() = static_cast<int>(t->fortLevel());
 		n["built"].Bool() = t->built >= 1; // shortcut: per-turn build limit is 1 in H3 rules
+		n["icon"].Integer() = t->getTown()->clientInfo.icons[t->hasFort()][t->built >= 1];
 		st["towns"].Vector().push_back(n);
 	}
 	if(const CArmedInstance * army = pi->localState->getCurrentArmy())
 	{
 		st["army"] = armyOf(army);
 		st["armyOf"].String() = hero ? hero->getNameTranslated() : town ? town->getNameTranslated() : "";
+	}
+
+	if(hero)
+		st["spells"] = spellsOf(hero, false, [&](const CSpell * sp)
+		{
+			spells::detail::ProblemImpl problem;
+			return pi->makingTurn && sp->getAdventureMechanics().canBeCast(problem, pi->cb.get(), hero);
+		});
+	if(adventureInt)
+	{
+		// what the game itself allows right now (same checks as its own side panel buttons)
+		auto & sc = adventureInt->getAdventureShortcuts();
+		JsonNode & can = st["can"];
+		can["endTurn"].Bool() = sc.optionCanEndTurn();
+		can["hero"].Bool() = sc.optionHeroSelected();
+		can["move"].Bool() = sc.optionHeroCanMove();
+		can["next"].Bool() = sc.optionHasNextHero();
+		can["quests"].Bool() = sc.optionCanViewQuests();
+		can["level"].Bool() = sc.optionCanToggleLevel();
+		can["market"].Bool() = sc.optionMarketplace();
+		can["dig"].Bool() = sc.optionHeroDig();
+		can["worldView"].Bool() = sc.optionInWorldView();
+		can["quickSave"].Bool() = sc.optionIsLocal();
+		can["quickLoad"].Bool() = sc.optionQuickSaveLoad();
+		can["visit"].Bool() = sc.optionCanVisitObject();
 	}
 
 	int3 size = pi->cb->getMapSize();
@@ -305,13 +518,56 @@ void runCommand(const std::string & line)
 	std::string arg = sp == std::string::npos ? "" : line.substr(sp + 1);
 	CPlayerInterface * pi = GAME->interface();
 
+	if(cmd == "art")
+	{
+		sendArt(arg);
+		return;
+	}
+	if(cmd == "speed")
+	{
+		Settings speed = settings.write["battle"]["speedFactor"];
+		speed->Float() = static_cast<float>(std::clamp(std::atoi(arg.c_str()), 1, 3));
+		return;
+	}
+	if(cmd == "bspell")
+	{
+		// same path as a click in the spell book: check, then the player picks the target on the top screen
+		auto b = CPlayerInterface::battleInt;
+		const CSpell * sp = SpellID(std::atoi(arg.c_str())).toSpell();
+		if(!pi || !b || !sp || !sp->isCombat() || b->tacticsMode || !b->stacksController || !b->stacksController->getActiveStack())
+			return;
+		const CGHeroInstance * h = b->getBattle()->battleGetMyHero();
+		if(!h || !h->canCastThisSpell(sp) || b->getBattle()->battleCanCastSpell(h, spells::Mode::HERO) != ESpellCastProblem::OK)
+			return;
+		if(pi->cb->getSpellCost(sp, h) > h->mana)
+		{
+			pi->showInfoDialog(boost::str(boost::format(LIBRARY->generaltexth->allTexts[206]) % pi->cb->getSpellCost(sp, h) % h->mana));
+			return;
+		}
+		spells::detail::ProblemImpl problem;
+		if(sp->canBeCast(problem, b->getBattle().get(), spells::Mode::HERO, h))
+			b->castThisSpell(sp->getId());
+		else
+		{
+			std::vector<std::string> texts;
+			problem.getAll(texts);
+			pi->showInfoDialog(texts.empty() ? LIBRARY->generaltexth->translate("vcmi.adventureMap.spellUnknownProblem") : texts.front());
+		}
+		return;
+	}
 	if(cmd == "key")
 	{
-		EShortcut sc = ENGINE->shortcuts().findShortcut(arg);
-		if(sc == EShortcut::NONE)
+		// several names = one key with several meanings, like Enter (accept + return) on a keyboard
+		std::vector<std::string> names;
+		boost::split(names, arg, boost::is_any_of(","));
+		std::vector<EShortcut> keys;
+		for(const auto & name : names)
+			if(EShortcut sc = ENGINE->shortcuts().findShortcut(name); sc != EShortcut::NONE)
+				keys.push_back(sc);
+		if(keys.empty())
 			return;
-		ENGINE->events().dispatchShortcutPressed({sc});
-		ENGINE->events().dispatchShortcutReleased({sc});
+		ENGINE->events().dispatchShortcutPressed(keys);
+		ENGINE->events().dispatchShortcutReleased(keys);
 		return;
 	}
 	if(!pi || !adventureInt || CPlayerInterface::battleInt)
@@ -336,6 +592,56 @@ void runCommand(const std::string & line)
 		}
 		pi->localState->setSelection(obj);
 		adventureInt->centerOnObject(obj);
+	}
+	else if(cmd == "spell")
+	{
+		// same path as a click in the spell book (CSpellWindow)
+		const CGHeroInstance * h = pi->localState->getCurrentHero();
+		const CSpell * sp = SpellID(std::atoi(arg.c_str())).toSpell();
+		if(!h || !sp || !sp->isAdventure() || !pi->makingTurn || !h->canCastThisSpell(sp))
+			return;
+		const int cost = pi->cb->getSpellCost(sp, h);
+		if(cost > h->mana)
+		{
+			pi->showInfoDialog(boost::str(boost::format(LIBRARY->generaltexth->allTexts[206]) % cost % h->mana));
+			return;
+		}
+		spells::detail::ProblemImpl problem;
+		if(sp->getAdventureMechanics().canBeCast(problem, pi->cb.get(), h))
+		{
+			if(sp->getAdventureMechanics().getEffectAs<AdventureSpellRangedEffect>(h) != nullptr)
+				adventureInt->enterCastingMode(sp);
+			else
+				pi->cb->castSpell(h, sp->getId());
+		}
+		else
+		{
+			std::vector<std::string> texts;
+			problem.getAll(texts);
+			pi->showInfoDialog(texts.empty() ? LIBRARY->generaltexth->translate("vcmi.adventureMap.spellUnknownProblem") : texts.front());
+		}
+	}
+	else if(cmd == "army")
+	{
+		// "army <from> <to> m|s": move / swap / merge a stack of the selected army, or split half of it off
+		int from = 0, to = 0;
+		char mode = 'm';
+		const CArmedInstance * army = pi->localState->getCurrentArmy();
+		if(!army || !pi->makingTurn || sscanf(arg.c_str(), "%d %d %c", &from, &to, &mode) != 3 || from == to
+			|| from < 0 || to < 0 || from >= GameConstants::ARMY_SIZE || to >= GameConstants::ARMY_SIZE || !army->hasStackAtSlot(SlotID(from)))
+			return;
+		const bool target = army->hasStackAtSlot(SlotID(to));
+		const bool same = target && army->getCreature(SlotID(to)) == army->getCreature(SlotID(from));
+		if(mode == 's')
+		{
+			const int half = army->getStackCount(SlotID(from)) / 2;
+			if(half > 0 && (!target || same))
+				pi->cb->splitStack(army, army, SlotID(from), SlotID(to), half + (target ? army->getStackCount(SlotID(to)) : 0));
+		}
+		else if(same)
+			pi->cb->mergeStacks(army, army, SlotID(from), SlotID(to));
+		else
+			pi->cb->swapCreatures(army, army, SlotID(from), SlotID(to));
 	}
 	else if(cmd == "tile")
 	{
@@ -385,7 +691,10 @@ void ThorDeck::tick()
 			runCommand(line);
 
 	if(!CPlayerInterface::battleInt)
+	{
 		logLines.clear();
+		battleSpellsKey.clear();
+	}
 
 	if(frame % 15 == 0) // ~4x per second at 60 fps
 	{
